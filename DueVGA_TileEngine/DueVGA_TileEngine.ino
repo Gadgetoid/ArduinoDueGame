@@ -47,16 +47,15 @@ unsigned char paint_sprite(unsigned char* sprite,unsigned char sprite_frame,uint
     && pixel_y >= sprite_y
     && pixel_x < sprite_x + TILE_SIZE
     && pixel_y < sprite_y + TILE_SIZE
-   ){
-    
-     int p_x = (pixel_x - player_x),
-         p_y = (pixel_y - player_y),
+   ){  
+     int p_x = (pixel_x - sprite_x),
+         p_y = (pixel_y - sprite_y),
          p_i,
-         p_frame_offset = SPRITE_HEADER_SIZE;
+         p_frame_offset = SPRITE_HEADER_SIZE + (sprite_frame*SPRITE_FRAME_OFFSET);
          
      p_i = (TILE_SIZE * p_y) + p_x;
      
-     if(player_frame>0) p_frame_offset = SPRITE_HEADER_SIZE + (sprite_frame*SPRITE_FRAME_OFFSET); //player_framesize);
+     //if(player_frame>0)  //player_framesize);
          
      unsigned char pixel = p_i % 2 
          ?  sprite[(uint16_t)(p_i/2)+p_frame_offset]       & 0xf
@@ -88,10 +87,9 @@ unsigned char get_tile_fragment(uint16_t x,uint16_t y){
   unsigned char tile_id = 0,
                 tile_fragment = BACKGROUND_COLOR;
   
-   // unsigned char tile_id = get_tile_at(x,y,z);
+  // unsigned char tile_id = get_tile_at(x,y,z);
   
   // Pass them to the correct fragment shader
-  
   unsigned char fg_tile = fg[tile_i],
                 mg_tile = mg[tile_i],
                 bg_tile = bg[tile_i];
@@ -111,6 +109,8 @@ unsigned char get_tile_fragment(uint16_t x,uint16_t y){
 
     // Paint player here
     tile_fragment = paint_sprite(player,player_frame,player_x,player_y,x,y,tile_fragment);
+    // Paint an enemy
+    tile_fragment = paint_sprite(enemy,enemy_frame,enemy_x,enemy_y,x,y,tile_fragment);
     
     if( fg_tile > 0 ) tile_fragment = call_fragment_shader(fg_tile,f_x,f_y,tile_x,tile_y,tile_fragment);
   //}
@@ -155,7 +155,6 @@ void generate_collision_map(){
   delay(2000);
 }*/
 
-
 void redraw_rect(uint16_t rect_x,uint16_t rect_y,uint16_t width,uint16_t height){
   for(uint16_t x=0;x<width;x++)
   {
@@ -199,7 +198,7 @@ void loop() {
            last_y = player_y;
   player_x+=1;
 
-  if(player_x + player[0] > RESX){
+  if(player_x + TILE_SIZE > RESX){
    player_x = 0; 
    redraw_rect(last_x,last_y,TILE_SIZE,TILE_SIZE);
   }
@@ -217,7 +216,7 @@ void loop() {
     player_frame++;
   }
   
-  if(player_frame >= player[2]){
+  if(player_frame >= player[0]){
    player_frame = 0; 
   }
   

@@ -31,7 +31,10 @@ boolean tile_opacity[4] = {
 };
 
 uint16_t player_x = 10,
-    player_y = 208;
+    player_y = RESY-player[0]-TILE_SIZE,
+    player_width = player[0],
+    player_height = player[1],
+    player_framesize = (player_width*player_height)/2;
     
 unsigned char player_frame = 0;
 
@@ -39,13 +42,8 @@ unsigned char tile_solid(uint16_t x, uint16_t y, uint16_t p_x, uint16_t p_y, uns
   return 255;
 }
 unsigned char tile_shadow(uint16_t x, uint16_t y, uint16_t p_x, uint16_t p_y, unsigned char fragment_col){
-  if(y%2){
-    return x%2?SHADOW_COLOR:fragment_col;
-  }
-  else
-  {
-    return x%2?fragment_col:SHADOW_COLOR;
-  }
+  if(y%2){return x%2?SHADOW_COLOR:fragment_col;}
+  else{return x%2?fragment_col:SHADOW_COLOR;}
 }
 unsigned char tile_bevel(uint16_t x, uint16_t y, uint16_t p_x, uint16_t p_y, unsigned char fragment_col){
  // Top highlight
@@ -91,12 +89,11 @@ unsigned char call_fragment_shader(uint16_t tile_id,uint16_t x, uint16_t y, uint
 }
 
 unsigned char paint_player(unsigned char player_frame,uint16_t player_x, uint16_t player_y, uint16_t pixel_x, uint16_t pixel_y, uint16_t fragment_col){
-  int player_width = player[0],
-      player_height = player[1];
       
   // Ensure the pixel is within the bounds of the player
   if(
-    pixel_x >= player_x && pixel_y >= player_y
+       pixel_x >= player_x
+    && pixel_y >= player_y
     && pixel_x < player_x + player_width
     && pixel_y < player_y + player_height
    ){
@@ -104,13 +101,15 @@ unsigned char paint_player(unsigned char player_frame,uint16_t player_x, uint16_
      int p_x = (pixel_x - player_x),
          p_y = (pixel_y - player_y),
          p_i,
-         p_frame_offset = 0;
+         p_frame_offset = SPRITE_HEADER_SIZE;
          
      p_i = (player_width * p_y) + p_x;
      
-     if(player_frame>0) p_frame_offset = (player_frame*player_width*player_height)/2;
+     if(player_frame>0) p_frame_offset = SPRITE_HEADER_SIZE + (player_frame*player_framesize);
          
-     unsigned char pixel = p_i % 2 ? player[(int)floor(p_i/2)+SPRITE_HEADER_SIZE+p_frame_offset] & 0xf : (player[(int)floor(p_i/2)+SPRITE_HEADER_SIZE+p_frame_offset] >> 4) & 0xf;
+     unsigned char pixel = p_i % 2 
+         ?  player[(uint16_t)(p_i/2)+p_frame_offset]       & 0xf
+         : (player[(uint16_t)(p_i/2)+p_frame_offset] >> 4) & 0xf;
      
      return pixel==0 ? fragment_col : get_player_palette(pixel,fragment_col); //player_palette[pixel-1];
      
@@ -142,25 +141,26 @@ unsigned char get_tile_fragment(uint16_t x,uint16_t y){
   
   // Pass them to the correct fragment shader
   
-  tile_id = fg[tile_i];
+  unsigned char fg_tile = fg[tile_i];
+  unsigned char mg_tile = mg[tile_i];
+  unsigned char bg_tile = bg[tile_i];
   
-  if( !tile_opacity[tile_id] ){
+  if( fg_tile == 3 ){
     //return tile_fragment_shader[tile_id](f_x,f_y,tile_x,tile_y,tile_fragment);
-    return call_fragment_shader(tile_id,f_x,f_y,tile_x,tile_y,tile_fragment);
+    return call_fragment_shader(fg_tile,f_x,f_y,tile_x,tile_y,tile_fragment);
   }
   
   //for(int z = 0;z<LEVEL_DEPTH;z++){
-    tile_id = bg[tile_i];
-    if( tile_id > 0 ) tile_fragment = call_fragment_shader(tile_id,f_x,f_y,tile_x,tile_y,tile_fragment);
+
+    if( bg_tile > 0 ) tile_fragment = call_fragment_shader(bg_tile,f_x,f_y,tile_x,tile_y,tile_fragment);
     
-    tile_id = mg[tile_i];
-    if( tile_id > 0 ) tile_fragment = call_fragment_shader(tile_id,f_x,f_y,tile_x,tile_y,tile_fragment);
+
+    if( mg_tile > 0 ) tile_fragment = call_fragment_shader(mg_tile,f_x,f_y,tile_x,tile_y,tile_fragment);
 
     // Paint player here
     tile_fragment = paint_player(player_frame,player_x,player_y,x,y,tile_fragment);
     
-    tile_id = fg[tile_i];
-    if( tile_id > 0 ) tile_fragment = call_fragment_shader(tile_id,f_x,f_y,tile_x,tile_y,tile_fragment);
+    if( fg_tile > 0 ) tile_fragment = call_fragment_shader(fg_tile,f_x,f_y,tile_x,tile_y,tile_fragment);
   //}
   
   return tile_fragment;
@@ -172,8 +172,8 @@ void redraw_rect(uint16_t rect_x,uint16_t rect_y,uint16_t width,uint16_t height)
     for(uint16_t y=0;y<height;y++)
     {
       VGA.putCPixelFast(
-        x+rect_x,
-        y+rect_y,
+        OFFSET_LEFT+x+rect_x,
+        OFFSET_TOP+y+rect_y,
         get_tile_fragment(x+rect_x,y+rect_y)
       );
     }
@@ -184,17 +184,10 @@ int s = 0;
 
 void setup() {
   int fragment_col = BACKGROUND_COLOR;
-  VGA.begin(RESX,RESY,VGA_COLOUR);
+  VGA.begin(320,240,VGA_COLOUR);
   
-  for(uint16_t x = 0;x<RESX;x++){
-    for(uint16_t y = 0;y<RESY;y++){
-      VGA.putCPixelFast(
-        x,
-        y,
-        get_tile_fragment(x,y)
-      );
-    }
-  }
+  redraw_rect(0,0,RESX,RESY);
+  
   /*
   for(int x = 0;x<RESX;x++){
     double h = map(x,0,319,0,360);
@@ -211,22 +204,30 @@ void setup() {
 
 void loop() {
   uint16_t last_x = player_x,
-      last_y = player_y;
-  player_x++;
+           last_y = player_y;
+  player_x+=1;
 
   if(player_x + player[0] > RESX){
    player_x = 0; 
-   redraw_rect(last_x,last_y,player[0],player[1]);
+   redraw_rect(last_x,last_y,player_width,player_height);
   }
   
   //redraw_rect(last_x,last_y,player[0],player[1]);
-  redraw_rect(player_x,player_y,player[0],player[1]);
+  redraw_rect(player_x-1,player_y,1,player_height);
+  redraw_rect(player_x,player_y,player_width,player_height);
+  
+  // redraw part of the screen to simulate drawing enemy sprites
+  redraw_rect(88,0,32,32);
+  
+  //redraw_rect(0,0,RESX,RESY);
   
   player_frame++;
   
   if(player_frame >= player[2]){
    player_frame = 0; 
   }
+  
+  //delay(500);
 }
 
 /*

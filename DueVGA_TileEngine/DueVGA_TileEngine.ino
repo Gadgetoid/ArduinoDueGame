@@ -1,3 +1,5 @@
+#include <MDC.h>
+
 /*
   This is a basic tile based game engine using
   a 20x16 grid of tiles, of values 0 to 255,
@@ -15,6 +17,7 @@
 #include "assets.h"
 #include "shaders.h"
 
+Mdc player1(45,47,49,51,53,44,52);
 
 // An array of function pointers is cool, but slower
 /*unsigned char (*tile_fragment_shader[4])(uint16_t x, uint16_t y, uint16_t p_x, uint16_t p_y, unsigned char fragment_col) = {
@@ -30,14 +33,22 @@ boolean tile_opacity[4] = {
   1,
   0 
 };
+int      player_vx = 0,
+         player_vy = 0;
+int      player_x = 10,
+         player_y = RESY-TILE_SIZE-TILE_SIZE,
+         enemy_x = 20,
+         enemy_y = RESY-TILE_SIZE-TILE_SIZE;
 
-uint16_t player_x = 10,
-    player_y = RESY-TILE_SIZE-TILE_SIZE;
+int logic_player_x = player_x * 1000;
+int logic_player_y = player_y * 1000;
+
     /*player_width = player[0],
     player_height = player[1],
     player_framesize = (player_width*player_height)/2;*/
     
-unsigned char player_frame = 0;
+unsigned char player_frame = 0,
+              enemy_frame = 0;
 
 unsigned char paint_sprite(unsigned char* sprite,unsigned char sprite_frame,uint16_t sprite_x, uint16_t sprite_y, uint16_t pixel_x, uint16_t pixel_y, uint16_t fragment_col){
       
@@ -117,31 +128,6 @@ unsigned char get_tile_fragment(uint16_t x,uint16_t y){
   
   return tile_fragment;
 }
-/*
-void generate_collision_map(){
-  for(uint16_t x=0;x<RESX;x++)
-  {
-    for(uint16_t y=0;y<RESY;y++)
-    {
-      uint16_t i = y*RESX + x,
-              tile_x = floor(x/TILE_SIZE),
-              tile_y = floor(y/TILE_SIZE),
-              tile_i = (tile_y*LEVEL_WIDTH)+tile_x,
-              // Get our x/y coords within the tile
-              f_x = x % TILE_SIZE,
-              f_y = y % TILE_SIZE;
-      
-      unsigned char mg_tile = mg[tile_i];
-      
-      collision[i] = 0;
-      
-      if( mg_tile > 0 && call_fragment_shader(mg_tile,f_x,f_y,tile_x,tile_y,255) != 255 ){
-        collision[i] = 1;
-      }
-      
-    }
-  }
-}*/
 
 /*void display_collision_map(){
   for(uint16_t x=0;x<RESX;x++)
@@ -174,53 +160,115 @@ int s = 0;
 void setup() {
   int fragment_col = BACKGROUND_COLOR;
   VGA.begin(320,240,VGA_COLOUR);
-  
+  VGA.fillRect(60,40,260,200,0x0C);
   redraw_rect(0,0,RESX,RESY);
-  //generate_collision_map();
-  //display_collision_map();
-  
-  /*
-  for(int x = 0;x<RESX;x++){
-    double h = map(x,0,319,0,360);
-    for(int y = 0;y<RESY;y++){
-      double v = map(y,0,239,0,100);
-      VGA.putCPixelFast(
-        x,
-        y,
-        hsv_to_rgb(h,100,v)
-      );
-    }
-  }*/
 }
 
 void loop() {
+  int loop_time = micros();
+  
   uint16_t last_x = player_x,
-           last_y = player_y;
-  player_x+=1;
+           last_y = player_y,
+           last_enemy_x = enemy_x,
+           last_enemy_y = enemy_y;
+           
+  player1.poll();
+ 
+  if(player1.pressed(BTN_A)){
+    player_vy=-200; 
+  }
 
-  if(player_x + TILE_SIZE > RESX){
-   player_x = 0; 
-   redraw_rect(last_x,last_y,TILE_SIZE,TILE_SIZE);
+  if(player1.down(BTN_LEFT)){
+    player_vx-=200;
+    if( player_x % 8 == 0 ){
+      player_frame++;
+    }
   }
   
-  //redraw_rect(last_x,last_y,player[0],player[1]);
-  redraw_rect(player_x-1,player_y,1,TILE_SIZE);
-  redraw_rect(player_x,player_y,TILE_SIZE,TILE_SIZE);
-  
-  // redraw part of the screen to simulate drawing enemy sprites
-  redraw_rect(88,0,32,32);
-  
-  //redraw_rect(0,0,RESX,RESY);
-  
-  if( player_x % 8 == 0 ){
-    player_frame++;
+  if(player1.down(BTN_RIGHT))
+  {
+    player_vx+=200;
+    if( player_x % 8 == 0 ){
+      player_frame++;
+    }
   }
+  
   
   if(player_frame >= player[0]){
    player_frame = 0; 
   }
   
-  //delay(500);
+  enemy_x+=1;
+
+
+  if(player_vx>0)  
+  player_vx -= abs(ceil(player_vx/10));
+  
+  if(player_vx<0)
+  player_vx += abs(ceil(player_vx/10));
+  
+  if(player_vx<10 && player_vx>-10){
+   player_vx=0; 
+  }
+  
+  //if(player_vy!=0)
+  //player_vy = floor(player_vy / 2);
+  
+  
+
+  
+  
+  logic_player_x += player_vx;
+  logic_player_y += player_vy;
+  
+  if(player_y < 94){
+    player_vy+=20;
+  }
+  
+  
+  player_x = round(logic_player_x/1000);
+  player_y = round(logic_player_y/1000);
+  
+  if(player_x + TILE_SIZE > RESX){
+   player_x = RESX - TILE_SIZE; 
+   logic_player_x = player_x*1000;
+  }
+  
+  if(player_x < 0){
+    player_x = 0;
+    logic_player_x = 0;
+  }
+  if(player_y < 0){
+   player_y = 0;
+   logic_player_y = 0; 
+  }
+  
+  if(player_y > 104){
+   player_y = 104;
+   logic_player_y = player_y*1000;
+   player_vy = 0;
+  }
+  
+  
+   if(enemy_x + TILE_SIZE > RESX){
+    enemy_x = 0; 
+   }
+  
+  redraw_rect(last_x,last_y,TILE_SIZE,TILE_SIZE);
+  redraw_rect(player_x,player_y,TILE_SIZE,TILE_SIZE);
+  redraw_rect(last_enemy_x,last_enemy_y,TILE_SIZE,TILE_SIZE);
+  redraw_rect(enemy_x,enemy_y,TILE_SIZE,TILE_SIZE);
+  
+  if( enemy_x % 4 == 0 ){
+    enemy_frame++;
+    if(enemy_frame >= enemy[0]){
+     enemy_frame = 0; 
+    } 
+  }
+  
+  
+  //delay(50);
+  delayMicroseconds(10000-(micros()-loop_time));
 }
 
 /*
